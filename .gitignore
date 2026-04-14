@@ -18,3 +18,14 @@ venv.bak/
 data/*
 !data/README.md
 !data/**/README.md
+
+.snakemake
+slurm_logs/
+*.out
+*.err
+
+/code/RNA/RNAseq-preprocessing/**/alignment/
+/code/RNA/RNAseq-preprocessing/**/featurecounts/
+/code/RNA/RNAseq-preprocessing/**/markdup/
+/code/RNA/RNAseq-preprocessing/**/metrics/
+/code/RNA/RNAseq-preprocessing/**/trimming/

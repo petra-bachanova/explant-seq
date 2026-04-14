@@ -1,0 +1,13 @@
+name: pca_plotnine_env
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - scikit-learn
+  - matplotlib
+  - numpy
+  - seaborn
+  - plotnine
+  - pandas
+  - fastcluster
+
