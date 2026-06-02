@@ -14,9 +14,9 @@ run_rsem: "no"
 #############################################
 #Strandedness settings - these should match #
 #############################################
-featurecounts_strand: "2" # '1', '0'
-rsem_strandedness: "reverse" # 'foward', 'none'
-picard_strand: "SECOND_READ_TRANSCRIPTION_STRAND" # 'FIRST_READ_TRANSCRIPTION', 'NONE'
+featurecounts_strand: "1" # '1', '0'
+rsem_strandedness: "foward" # 'foward', 'none'
+picard_strand: "FIRST_READ_TRANSCRIPTION_STRAND" # 'FIRST_READ_TRANSCRIPTION', 'NONE'
 
 
 #############################################
