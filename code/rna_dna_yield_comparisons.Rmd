@@ -1,0 +1,126 @@
+---
+title: "Yield comparisons"
+output: html_document
+---
+
+```{r}
+library(glue)
+library(readxl)
+
+project_dir <- "~/Documents/repos/explant-seq"
+yields_literature <- read_excel(glue("{project_dir}/data/dna_rna_yields.xlsx"), sheet = "yields_previous_studies")
+yields_dhmc <- read_excel(glue("{project_dir}/data/dna_rna_yields.xlsx"), sheet = "yields_our_protocols")
+```
+### Clean
+```{r}
+library(tidyverse)
+
+yields_lit_clean <- yields_literature %>%
+  mutate(
+    source = Study,
+    group  = "Literature",
+    DNA    = suppressWarnings(as.numeric(ifelse(DNA %in% c("NR", "NA", ""), NA, DNA))),
+    RNA    = suppressWarnings(as.numeric(ifelse(RNA %in% c("NR", "NA", ""), NA, RNA))),
+    RIN    = suppressWarnings(as.numeric(ifelse(RIN %in% c("NR", "NA", ""), NA, RIN)))
+  ) %>%
+  select(source, group, DNA, RNA, RIN)
+
+yields_dhmc_clean <- yields_dhmc %>%
+  mutate(
+    source = Protocol,
+    group  = "DHMC",
+    RIN    = suppressWarnings(as.numeric(RIN))
+  ) %>%
+  select(source, group, DNA, RNA, RIN)
+
+yields_combined <- bind_rows(yields_lit_clean, yields_dhmc_clean)
+
+yields_long <- yields_combined %>%
+  pivot_longer(
+    cols      = c(DNA, RNA, RIN),
+    names_to  = "molecule",
+    values_to = "value"
+  ) %>%
+  filter(!is.na(value)) %>%   # drop rows where this molecule was not measured
+  mutate(
+    molecule = factor(molecule, levels = c("DNA", "RNA", "RIN")),
+    # y-axis label per panel
+    y_label  = case_when(
+      molecule == "DNA" ~ "Total DNA (ng)",
+      molecule == "RNA" ~ "Total RNA (ng)",
+      molecule == "RIN" ~ "RIN"
+    ),
+    source = factor(source, levels = c("Checri, 2023", "Dwivedi, 2025", "PBS-incubation-4h", "PBS-wash", "no-PBS_frozen-lysis", "PBS-wash_fresh-lysis", "PBS-wash_frozen-lysis"))
+  )
+```
+
+```{r}
+library(patchwork)
+
+source_colours <- c(
+  "Checri, 2023"           = "#F1BB7B",
+  "Dwivedi, 2025"          = "#FD6467",
+  "PBS-incubation-4h"      = "#5B1A18",
+  "PBS-wash"               = "#D67236",
+  "no-PBS_frozen-lysis"    = "#02401B",
+  "PBS-wash_fresh-lysis"   = "#5BBCD6",
+  "PBS-wash_frozen-lysis"  = "#00A08A"
+)
+
+shared_theme <- theme_bw(base_size = 12) +
+  theme(
+    # axis.text.x      = element_blank(),
+    # axis.ticks.x     = element_blank(),
+    axis.text.x      = element_text(angle = 35, hjust = 1, size = 9),
+    strip.background = element_rect(fill = "grey92"),
+    strip.text       = element_text(face = "bold", size = 10),
+    legend.position  = "none",
+    plot.caption     = element_text(size = 8, colour = "grey50"),
+    axis.title.y     = element_text(size = 10),
+    plot.title       = element_text(hjust = 0.5, size = 11, face = "bold")
+  )
+
+# ---DNA-panel------------------------------------------------------------------
+dna_data <- yields_long %>% filter(molecule == "DNA")
+p_dna <- ggplot(dna_data,
+                aes(x = source, y = value, colour = source, fill = source)) +
+  geom_boxplot(alpha = 0.25, outlier.shape = NA, width = 0.5) +
+  geom_jitter(width = 0.15, height = 0, size = 1, alpha = 0.8) +
+  # scale_y_log10() +
+  scale_colour_manual(values = source_colours) +
+  scale_fill_manual(values = source_colours) +
+  labs(x = NULL, y=NULL, title = "DNA (ng)") +
+  shared_theme
+
+# ---RNA-panel------------------------------------------------------------------
+rna_data <- yields_long %>% 
+  filter(molecule == "RNA") %>% 
+  mutate(value = as.numeric(value))
+p_rna <- ggplot(rna_data,
+                aes(x = source, y = value, colour = source, fill = source)) +
+  geom_boxplot(alpha = 0.25, outlier.shape = NA, width = 0.5) +
+  geom_jitter(width = 0.15, height = 0, size = 1, alpha = 0.8)+
+  scale_colour_manual(values = source_colours) +
+  scale_fill_manual(values = source_colours) +
+  labs(x = NULL, y=NULL, title = "RNA (ng)") +
+  shared_theme
+
+# ---RIN-panel------------------------------------------------------------------
+rin_data <- yields_long %>% filter(molecule == "RIN")
+p_rin <- ggplot(rin_data,
+                aes(x = source, y = value, colour = source, fill = source)) +
+  geom_boxplot(alpha = 0.25, outlier.shape = NA, width = 0.5) +
+  geom_jitter(width = 0.15, height = 0, size = 1, alpha = 0.8) +
+  scale_colour_manual(values = source_colours) +
+  scale_fill_manual(values = source_colours) +
+  labs(x = NULL, y=NULL, title = "RIN") +
+  shared_theme
+
+# ---Combine------------------------------------------------------------------
+p_dna + p_rna + p_rin +
+  plot_layout(ncol = 3)
+```
+
+DNA and RNA yields are consistently higher across our lysis protocols compared with PBS incubation and rinse also used by Checri and Dwivedi for electrode processing.
+
+Freezing electrodes prior to lysis leads to lower yields that are more variable.

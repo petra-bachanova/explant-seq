@@ -1,0 +1,213 @@
+---
+title: "RNAseq exploratory analysis"
+output: html_document
+---
+
+# QC: mapped and assigned reads
+HISAT2 alignment score relates to the number of reads that were mapped to the reference genome.
+Feature counts QC summarises the quantity of those mapped reads that overlap with an annotated feature on the reference genome.
+
+### Setup
+```{r}
+library(readr)
+library(glue)
+library(janitor)
+library(readxl)
+library(dplyr)
+library(purrr)
+
+project_dir <- "~/Documents/repos/explant-seq"
+rna_dir <- glue("{project_dir}/data/RNA/RNA-preprocessed")
+patients <- c("EXP001", "EXP003", "EXP006", "EXP007")
+```
+
+### Extract proportions of mapped reads from alignment txt summaries
+```{r}
+parse_hisat_summary <- function(filepath) {
+  lines <- readLines(filepath)
+  rate_line <- lines[grepl("overall alignment rate", lines)]
+  rate <- as.numeric(gsub("%.*", "", rate_line))
+  tibble(file = basename(filepath), perc_mapped = rate)
+}
+
+alignment_qc <- patients %>%
+  set_names() %>%
+  map_dfr(~ {
+    files <- Sys.glob(glue("{rna_dir}/260601_exp001-007/alignment_summary/{.x}_*.hisat.summary.txt"))
+    map_dfr(files, parse_hisat_summary)
+  }, .id = "subject") %>%
+  mutate(sample = gsub("\\.hisat\\.summary\\.txt", "", file)) %>% 
+  select(subject, sample, perc_mapped)
+```
+
+### Extract proportions of assigned reads from featurecounts summary file
+```{r}
+fc_summary <- read_tsv(glue("{rna_dir}/260601_exp001-007/feature_counts/featurecounts.readcounts.raw.tsv.summary")) %>%
+  as.data.frame() %>%
+  t() %>%
+  as.data.frame() %>%
+  row_to_names(row_number = 1) %>%
+  tibble::rownames_to_column("sample") %>%
+  mutate(sample = gsub("alignment/(.*?)\\.srt\\.bam", "\\1", sample)) %>%
+  mutate(across(-sample, as.numeric)) %>%
+  mutate(total = rowSums(across(-sample)),
+         perc_assigned = (Assigned / total) * 100) %>%
+  select(sample, perc_assigned)
+
+qc_data <- left_join(alignment_qc, fc_summary, by = "sample")
+```
+
+```{r}
+library(ggplot2)
+library(tidyr)
+
+qc_data %>%
+  pivot_longer(cols = c(perc_mapped, perc_assigned),
+               names_to = "metric",
+               values_to = "value") %>%
+  mutate(metric = recode(metric,
+                         "perc_mapped" = "% Mapped",
+                         "perc_assigned" = "% Assigned"), 
+         metric = factor(metric, levels = c("% Mapped", "% Assigned"))) %>%
+  ggplot(aes(x = metric, y = value, colour = subject)) +
+  geom_boxplot(outlier.shape = NA, colour = "grey60", width = 0.4) +
+  geom_jitter(width = 0.15, size = 2, alpha = 0.7) +
+  labs(title = "Alignment and assignment rates 4 patients (52 electrodes)",
+       x = NULL, y = "%", colour = "Subject") +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        panel.grid.minor = element_blank())
+```
+
+# EXPLORATORY ANALYSIS (PCA, batch correction)
+### Setup
+Principal component analysis is done on the TPM (transcripts per million) normalised data. However, 
+```{r}
+# read in electrode metadata
+patients <- c("EXP001", "EXP003", "EXP006", "EXP007")
+electrode_metadata <- patients %>%
+  set_names() %>%
+  map_dfr(~ read_excel(glue("{project_dir}/data/metadata/{.x}_electrode_metadata.xlsx")),
+          .id = "subject")
+
+# read in TPM normalised counts
+tpm_counts <- read_tsv(glue("{project_dir}/data/RNA/RNA-preprocessed/260601_exp001-007_feature_counts/featurecounts.readcounts_tpm.ann.tsv"))
+cols <- c(
+  'Gene Name', 'Chr', 'Start', 'End', 'Strand', 'Length', 
+  'EXP002_Frontal_lobe', 'EXP005_LPAG', 'EXP005_LPRS', 'EXP005_RLTS')
+tpm_counts <- tpm_counts[, !(names(tpm_counts) %in% cols)]
+```
+
+### Filter and log transform
+```{r}
+library(edgeR)
+
+# remove rows where more than 90% of values are zero
+tpm_counts <- tibble::column_to_rownames(tpm_counts, var = "Ensembl ID")
+zero_fraction <- rowSums(tpm_counts == 0) / ncol(tpm_counts)
+tpm_matrix <- data.matrix(tpm_counts[zero_fraction <= 0.9, ])  # filter and convert to data matrix
+# add a small pseudocount to avoid log(0)
+tpm_log <- log2(tpm_matrix + 1)
+head(tpm_log)
+```
+
+### PCA before batch correction
+```{r}
+# ggplot theme for PCA plots
+theme_prism <- theme_bw(base_size = 14) +
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_blank(),          # remove all panel borders
+    axis.line = element_line(color = "black", linewidth = 1),  # draws bottom/left axes
+    axis.ticks = element_line(color = "black", linewidth = 1),
+    axis.title.y = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 14),
+    axis.text = element_text(face = "bold", size = 12, color = "black"),
+    legend.text = element_text(face = "bold"),
+    legend.title = element_blank(),
+    plot.title = element_text(face = "bold", size = 12, hjust = 0.5),
+    plot.margin = margin(10, 10, 10, 10)
+  )
+
+# PCA before batch correction
+pca_no_bc <- prcomp(t(tpm_log), scale. = TRUE)
+# extract PC1 and PC2 and merge in metadata
+pca_no_bc_df <- data.frame(
+  PC1 = pca_no_bc$x[,1],
+  PC2 = pca_no_bc$x[,2],
+  electrode_metadata
+)
+
+var_explained <- pca_no_bc$sdev^2 / sum(pca_no_bc$sdev^2)
+p_no_bc <- ggplot(pca_no_bc_df, aes(x = PC1, y = PC2, color = subject)) +
+  geom_point(size = 2) +
+  theme_minimal() +
+  labs(
+    title = "PCA before batch correction",
+    x = paste0("PC1 (", round(var_explained[1]*100, 1), "%)"),
+    y = paste0("PC2 (", round(var_explained[2]*100, 1), "%)")
+  ) + theme_prism +
+  scale_color_brewer(palette = "Dark2")
+```
+
+### Batch correction using SVA's ComBat & Save data
+```{r}
+library(sva)
+
+electrode_metadata <- electrode_metadata[match(colnames(tpm_log), electrode_metadata$sample_id), ]
+all(colnames(tpm_log) == electrode_metadata$sample_id)
+
+combat_expr <- ComBat(
+  dat = tpm_log,
+  batch = electrode_metadata$subject,
+  par.prior = TRUE,
+  prior.plots = FALSE
+)
+write.table(combat_expr, glue("{project_dir}/data/RNA/RNA-analysis/log2transformed_batch_corrected_gene_exp_mat.csv"), sep = "\t")
+```
+
+```{r}
+pca_bc <- prcomp(t(combat_expr), scale. = TRUE)
+pca_bc_df <- data.frame(
+  PC1 = pca_bc$x[,1],
+  PC2 = pca_bc$x[,2],
+  electrode_metadata
+)
+
+var_explained <- pca_bc$sdev^2 / sum(pca_bc$sdev^2)
+p_bc <- ggplot(pca_bc_df, aes(x = PC1, y = PC2, color = subject)) +
+  geom_point(size = 2) +
+  theme_minimal() +
+  labs(
+    title = "PCA after batch correction",
+    x = paste0("PC1 (", round(var_explained[1]*100, 1), "%)"),
+    y = paste0("PC2 (", round(var_explained[2]*100, 1), "%)")
+  ) + theme_prism +
+  scale_color_brewer(palette = "Dark2")
+```
+
+```{r}
+p_no_bc
+p_bc
+```
+
+PCs capture less variance than prior to the batch correction (PC1: 13.7% -> 6.5%, PC2: 4.2% -> 4.1%). However, Combat did not adjust away the difference between EXP003 and the other subjects. This might be due to true biological differences between subjects. We could also explore more aggressive batch correction approaches.
+
+```{r}
+p <- ggplot(pca_bc_df[pca_bc_df$region != "x", ], aes(x = PC1, y = PC2, color = region)) +
+  geom_point(size = 3) +
+  theme_minimal() +
+  scale_color_brewer(palette = "Dark2") +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(
+    title = "PCA coloured by brain region",
+    x = paste0("PC1 (", round(var_explained[1]*100, 1), "%)"),
+    y = paste0("PC2 (", round(var_explained[2]*100, 1), "%)")
+  ) +
+  theme_prism
+p
+```
+
+
+
+

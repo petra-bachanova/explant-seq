@@ -1,0 +1,81 @@
+---
+title: "Table 1: patient demographics"
+output: html_document
+---
+
+```{r}
+library(glue)
+library(dplyr)
+library(stringr)
+
+project_dir <- "~/Documents/repos/explant-seq"
+df <- read.csv(glue("{project_dir}/data/metadata/Explant-seq_metadata_DEID_260604.csv"), check.names = FALSE)
+head(df)
+
+df <- df %>%
+  filter(`SEEG laterality` != "") %>%
+  mutate(
+    race_display = if_else(str_detect(Race, ","), "Multiracial", Race),
+    rf_head_trauma        = factor(str_detect(`Risk factors`, "head trauma")),
+    rf_perinatal          = factor(str_detect(`Risk factors`, "complication of birth") |
+                                       str_detect(`Risk factors`, "early term birth")),
+    rf_neurodevelopmental = factor(str_detect(`Risk factors`, "developmental delay") |
+                                       str_detect(`Risk factors`, "learning disability") |
+                                       str_detect(`Risk factors`, "intellectual disability")),
+    rf_encephalitis       = factor(str_detect(`Risk factors`, "encephalitis")),
+    rf_family_history     = factor(str_detect(`Risk factors`, "family history")),
+    rf_fetal_alcohol      = factor(str_detect(`Risk factors`, "fetal alcohol")),
+    rf_hearing_impairment = factor(str_detect(`Risk factors`, "hearing impairment")),
+    rf_any                = factor(!str_detect(`Risk factors`, "^none$")), 
+    mts_diagnosis         = factor(str_detect(tolower(`MRI findings`), "mts") |
+                                         str_detect(tolower(`Pathology findings`), "mts"))
+  )
+
+df <- df %>%
+  mutate(
+    `SEEG laterality` = case_match(`SEEG laterality`, "R"  ~ "Right", "L"  ~ "Left", "Bl" ~ "Bilateral"),
+    `SEEG laterality` = factor(`SEEG laterality`, levels = c("Left", "Right", "Bilateral")),
+    Sex = case_match(Sex, "M" ~ "Male", "F" ~ "Female"),
+    Sex = factor(Sex, levels = c("Male", "Female")),
+    race_display = factor(race_display),
+    Ethnicity = factor(Ethnicity)
+  )
+```
+
+```{r}
+library(table1)
+
+# --- table1 labels ---
+label(df$`Age at explant`)        <- "Age at explant (years)"
+label(df$`Epilepsy duration`)     <- "Epilepsy duration (years)"
+label(df$`N electrodes`)          <- "Electrodes implanted (n)"
+label(df$Sex)                     <- "Sex"
+label(df$race_display)            <- "Race"
+label(df$Ethnicity)               <- "Ethnicity"
+label(df$mts_diagnosis)           <- "MTS diagnosis (MRI or pathology)"
+label(df$rf_head_trauma)          <- "Head trauma"
+label(df$rf_perinatal)            <- "Perinatal complications"
+label(df$rf_neurodevelopmental)   <- "Neurodevelopmental complications"
+label(df$rf_encephalitis)         <- "Encephalitis"
+label(df$rf_family_history)       <- "Family history of epilepsy"
+
+my_continuous <- function(x, ...) {
+  with(stats.apply.rounding(stats.default(x, ...), ...), 
+       c("", "Median [IQR]" = sprintf("%s [%s, %s]", MEDIAN, Q1, Q3)))
+}
+
+footnote <- "EXP002 excluded from the table since this was an ex-vivo implant during resection"
+table1(
+  ~ `Age at explant` + `SEEG laterality` + `Epilepsy duration` + `N electrodes` +
+    race_display + Ethnicity + mts_diagnosis +
+    rf_head_trauma + rf_perinatal +
+    rf_neurodevelopmental + rf_encephalitis + rf_family_history
+  | Sex,
+  data = df,
+  render.continuous = my_continuous, footnote=footnote
+)
+```
+
+
+
+
