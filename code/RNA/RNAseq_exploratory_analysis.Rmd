@@ -84,14 +84,14 @@ qc_data %>%
 Principal component analysis is done on the TPM (transcripts per million) normalised data. However, 
 ```{r}
 # read in electrode metadata
-patients <- c("EXP001", "EXP003", "EXP006", "EXP007")
 electrode_metadata <- patients %>%
   set_names() %>%
   map_dfr(~ read_excel(glue("{project_dir}/data/metadata/{.x}_electrode_metadata.xlsx")),
           .id = "subject")
 
 # read in TPM normalised counts
-tpm_counts <- read_tsv(glue("{project_dir}/data/RNA/RNA-preprocessed/260601_exp001-007_feature_counts/featurecounts.readcounts_tpm.ann.tsv"))
+tpm_counts <- read_tsv(
+  glue("{rna_dir}/260601_exp001-007/feature_counts/featurecounts.readcounts_tpm.ann.tsv"))
 cols <- c(
   'Gene Name', 'Chr', 'Start', 'End', 'Strand', 'Length', 
   'EXP002_Frontal_lobe', 'EXP005_LPAG', 'EXP005_LPRS', 'EXP005_RLTS')
@@ -163,8 +163,16 @@ combat_expr <- ComBat(
   par.prior = TRUE,
   prior.plots = FALSE
 )
-write.table(combat_expr, glue("{project_dir}/data/RNA/RNA-analysis/log2transformed_batch_corrected_gene_exp_mat.csv"), sep = "\t")
+# write.table(combat_expr, glue("{project_dir}/data/RNA/RNA-analysis/log2transformed_batch_corrected_gene_exp_mat.csv"), sep = "\t")
 ```
+
+
+### Batch correction using SVA's ComBat & Save data
+```{r}
+
+```
+
+
 
 ```{r}
 pca_bc <- prcomp(t(combat_expr), scale. = TRUE)

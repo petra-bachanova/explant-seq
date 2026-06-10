@@ -1,0 +1,150 @@
+---
+title: "RNAseq cell type deconvolution"
+output: html_document
+---
+
+# Prepare data for CIBERSORTx
+### Setup
+I'm using CIBERSORTx for cell deconvolution.
+
+Brain signature matrix is from ROSMAP data, as published in Dai et al., 2024 (https://www-science-org.dartmouth.idm.oclc.org/doi/10.1126/sciadv.adh2588). 
+The dataset contains 8 cell types including Excitatory neurons, Oligodendrocytes, Inhibitory neurons, Microglia, Oligodendrocyte precursor cells, Astrocytes, Endothelial cells and Pericytes.
+It is CPM (counts per million) normalised.
+
+CIBERSORTx prefers matched normalisation between signature matrix and mixture. I'm reading in raw counts and CPM normalising & log2 transforming.
+```{r}
+library(readr)
+library(glue)
+library(edgeR)
+library(dplyr)
+
+project_dir <- "~/Documents/repos/explant-seq"
+rna_dir <- glue("{project_dir}/data/RNA/RNA-preprocessed")
+
+# read in raw counts
+raw_counts <- read.table(
+  glue("{rna_dir}/260601_exp001-007/feature_counts/featurecounts.readcounts.raw.tsv"),
+  sep = "\t", header = TRUE)
+
+# clean column names & remove unnecessary columns
+colnames(raw_counts) <- gsub("alignment.(.*?).srt.bam", "\\1", colnames(raw_counts))
+cols <- c(
+  'Gene Name', 'Chr', 'Start', 'End', 'Strand', 'Length', 
+  'EXP002_Frontal_lobe', 'EXP005_LPAG', 'EXP005_LPRS', 'EXP005_RLTS')
+raw_counts <- raw_counts[, !(names(raw_counts) %in% cols)]
+
+# CPM normalise & log2 transform
+cpm_log <- raw_counts %>% dplyr::select(-"Geneid") %>% cpm(log = TRUE, prior.count = 1)
+cpm_log <- data.frame(cpm_log)
+cpm_log$ensembl_gene_id <- raw_counts$Geneid
+```
+
+### Get Ensembl ID to gene symbol key 
+```{r}
+library(biomaRt)
+
+mart <- useMart("ensembl", 
+                dataset = "hsapiens_gene_ensembl")
+
+annot <- getBM(
+  attributes = c("ensembl_gene_id", "hgnc_symbol"),
+  filters = "ensembl_gene_id",
+  values = cpm_log$ensembl_gene_id,
+  mart = mart
+)
+```
+
+### Clean reference & filter CPM to match reference gene list
+```{r}
+# merge in gene IDs into cpm_log
+cpm_log <- annot %>% left_join(cpm_log, by = "ensembl_gene_id")
+
+# read in ROSMAP, remove MARCH genes (Excel date conversion issue), "versioned" genes and duplicates
+rosmap <- read.table(glue("{project_dir}/data/RNA/rosmap_ref_rujiadai_251028.csv"), sep=",", header=TRUE)
+rosmap <- rosmap[!grepl("^MARCH", rosmap$X), ]
+rosmap$X <- sub("\\..*$", "", rosmap$X)
+rosmap <- rosmap[!duplicated(rosmap$X), ]
+write.table(rosmap, glue("{project_dir}/data/RNA/cibersort_signature_matrix_rosmap_clean_260608.tsv"), sep = "\t", row.names = FALSE)
+
+# number of gene ids that match between the Rosmap signature matrix and my RNAseq data
+matching <- intersect(cpm_log$hgnc_symbol, rosmap$X)
+cat("Number of matching gene IDs between ROSMAP & electrode RNAseq data:", length(matching))
+
+# filter by matching gene IDs
+filtered <- cpm_log[cpm_log$hgnc_symbol %in% matching, ]
+filtered <- filtered[!duplicated(filtered$hgnc_symbol), ]
+filtered <- filtered %>% dplyr::select(-"ensembl_gene_id")
+
+write.table(filtered, glue("{project_dir}/data/RNA/cibersort_mixture_cpm_log2_260608.tsv"), sep = "\t", row.names = FALSE)
+```
+
+# Analyse deconvoluted cell proportions
+```{r}
+library(ggplot2)
+library(reshape2)
+
+deconv_df <- read.csv(glue("{project_dir}/data/RNA/cibersort_res_job11_260609.csv"))
+deconv_df <- deconv_df %>% dplyr::select(-c("P.value", "Correlation", "RMSE"))
+deconv_df_melt <- reshape2::melt(deconv_df, id.vars = "Mixture")
+
+ggplot(data=deconv_df_melt, aes(x=variable, y=value, colour = variable)) + geom_boxplot()
+```
+
+```{r}
+library(ggplot2)
+library(wesanderson)
+
+zissou_pal <- wes_palette("Zissou1", 8, type = "continuous")
+
+p_box <- ggplot(deconv_df_melt, aes(x = variable, y = value, colour = variable, fill = variable)) +
+  geom_boxplot(alpha = 0.3, outlier.shape = NA) +
+  geom_jitter(width = 0.15, size = 1.5, alpha = 0.6) +
+  scale_colour_manual(values = zissou_pal) +
+  scale_fill_manual(values = zissou_pal) +
+  labs(
+    title = "Overall deconvolved cell proportions (ROSMAP reference)",
+    subtitle = "n=52 samples",
+    x = NULL,
+    y = "Proportion",
+    colour = NULL,
+    fill = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, colour = "grey50"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank(),
+    legend.position = "none"
+  )
+
+p_stack <- ggplot(deconv_df_melt, aes(x = Mixture, y = value, fill = variable)) +
+  geom_bar(stat = "identity", width = 1) +
+  scale_fill_manual(values = zissou_pal) +
+  labs(
+    title = "Deconvolved cell proportions across 52 samples (ROSMAP reference)",
+    subtitle = "In, Opc, Ast had 0 proportions",
+    x = NULL,
+    y = "Proportion (%)",
+    fill = "Cell type"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, colour = "grey50"),
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
+    panel.grid = element_blank(),
+    legend.position = "right"
+  )
+
+
+p_box
+p_stack
+```
+
+
+
+
+
+
+
