@@ -1,0 +1,244 @@
+---
+title: "DGE hippomcapus analysis"
+output: html_document
+---
+
+# Setup
+
+```{r}
+library(readr)
+library(glue)
+library(dplyr)
+library(purrr)
+library(readxl)
+
+
+project_dir <- "~/Documents/repos/explant-seq"
+rna_dir <- glue("{project_dir}/data/RNA/RNA-preprocessed")
+patients <- c("EXP001", "EXP003", "EXP006", "EXP007")
+
+# read in electrode metadata
+electrode_metadata <- patients %>%
+  set_names() %>%
+  map_dfr(~ read_excel(glue("{project_dir}/data/metadata/{.x}_electrode_metadata.xlsx")),
+          .id = "subject")
+meta <- electrode_metadata[!is.na(electrode_metadata$hippocampus), ]
+
+# read in raw counts
+raw_counts <- read.table(
+  glue("{rna_dir}/260601_exp001-007/feature_counts/featurecounts.readcounts.raw.tsv"),
+  sep = "\t", header = TRUE)
+colnames(raw_counts) <- gsub("alignment.(.*?).srt.bam", "\\1", colnames(raw_counts))
+
+cols <- c(meta$sample_id, "Geneid")
+raw_counts <- raw_counts[, (names(raw_counts) %in% cols)]
+```
+
+```{r}
+library(DESeq2)
+library(tibble)
+
+# ensure electrode metadata rows match raw_counts
+raw_counts <- column_to_rownames(raw_counts, var = "Geneid")
+meta <- meta[match(colnames(raw_counts), meta$sample_id), ]
+all(colnames(raw_counts) == meta$sample_id)
+meta$hippocampus <- factor(meta$hippocampus, levels = c("contralateral", "implicated")) # contralateral as baseline)
+meta$subject <- factor(meta$subject)
+
+# create DESeq2 object
+dds <- DESeqDataSetFromMatrix(
+  countData = raw_counts,
+  colData = meta,
+  design = ~ subject + hippocampus
+)
+
+# filter to remove genes with very low counts (keeps genes with >10 counts in >4 samples)
+keep <- rowSums(counts(dds) >= 10) >= 4
+dds <- dds[keep, ]
+
+# run DESeq2
+dds <- DESeq(dds)
+resultsNames(dds)
+res <- results(dds, name = "hippocampus_implicated_vs_contralateral", alpha = 0.1)
+summary(res)
+res_df <- as.data.frame(res) %>%
+  rownames_to_column("ensembl_gene_id") %>%
+  arrange(padj)
+
+head(res_df)
+```
+
+```{r}
+library(biomaRt)
+
+mart <- useMart("ensembl", 
+                dataset = "hsapiens_gene_ensembl")
+
+annot <- getBM(
+  attributes = c("ensembl_gene_id", "hgnc_symbol"),
+  filters = "ensembl_gene_id",
+  values = res_df$ensembl_gene_id,
+  mart = mart
+)
+
+res_df <- annot %>% left_join(res_df, by = "ensembl_gene_id")
+res_df <- res_df[order(res_df$pvalue), ]
+```
+
+```{r}
+library(ggplot2)
+library(ggrepel)
+
+# define significance thresholds
+lfc_thresh <- 1
+p_thresh <- 0.001
+
+# categorise genes
+res_df <- res_df %>%
+  mutate(
+    significance = case_when(pvalue < p_thresh & log2FoldChange > lfc_thresh  ~ "Up",
+                             pvalue < p_thresh & log2FoldChange < -lfc_thresh ~ "Down" , 
+                             TRUE ~ "NS"),
+    significance = factor(significance, levels = c("Up", "Down", "NS"))) %>%
+  filter(!is.na(hgnc_symbol) & hgnc_symbol != "") %>%
+  filter(!is.na(pvalue)) %>%
+  mutate(fc_pval_rank = sign(log2FoldChange) * -log10(pvalue)) %>%
+  arrange(desc(fc_pval_rank))
+
+
+# select top genes to label
+label_genes <- res_df %>%
+  filter(pvalue < p_thresh) %>%
+  arrange(desc(abs(log2FoldChange))) %>%
+  slice_head(n = 10)
+
+ggplot(res_df, aes(x = log2FoldChange, y = -log10(pvalue), colour = significance)) +
+  geom_point(alpha = 0.6, size = 1.5) +
+  geom_point(data = filter(res_df, significance != "NS"), size = 2.5, alpha = 0.9) +
+  geom_vline(xintercept = c(-lfc_thresh, lfc_thresh), 
+             linetype = "dashed", colour = "grey50", linewidth = 0.4) +
+  geom_hline(yintercept = -log10(max(res_df$pvalue[res_df$pvalue < p_thresh], na.rm = TRUE)),
+             linetype = "dashed", colour = "grey50", linewidth = 0.4) +
+  geom_text_repel(
+    data = label_genes,
+    aes(label = hgnc_symbol),
+    size = 3.5,
+    max.overlaps = 20,
+    box.padding = 0.5,
+    colour = "black") +
+  scale_colour_manual(values = c("Up" = "#E64B35", "Down" = "#4DBBD5", "NS" = "grey70")) +
+  scale_x_continuous(limits = c(-4, 4)) +
+  labs(title = "Contralateral vs Implicated Hippocampus", x = "log2FC", y = "-log10(pval)", colour = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.grid.minor = element_blank(),
+    legend.position = "top"
+  )
+```
+
+# GSEA
+```{r}
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(enrichplot)
+library(dplyr)
+
+head(res_df)
+
+ranked_list <- res_df %>%
+  filter(!is.na(fc_pval_rank)) %>%
+  arrange(desc(fc_pval_rank)) %>%
+  # convert HGNC to Entrez ID
+  left_join(
+    bitr(res_df$hgnc_symbol, 
+         fromType = "SYMBOL",
+         toType = "ENTREZID",
+         OrgDb = org.Hs.eg.db),
+    by = c("hgnc_symbol" = "SYMBOL")
+  ) %>%
+  filter(!is.na(ENTREZID)) %>%
+  # remove duplicate entrez IDs keeping highest absolute rank
+  arrange(desc(abs(fc_pval_rank))) %>%
+  filter(!duplicated(ENTREZID)) %>%
+  # create named vector for GSEA
+  { setNames(.$fc_pval_rank, .$ENTREZID) } %>%
+  sort(decreasing = TRUE)
+
+gsea_go <- gseGO(
+  geneList     = ranked_list,
+  OrgDb        = org.Hs.eg.db,
+  ont          = "BP",
+  minGSSize    = 15,
+  maxGSSize    = 500,
+  pvalueCutoff = 0.05,
+  pAdjustMethod = "BH",
+  verbose      = TRUE,
+  seed         = 42
+)
+
+# simplify redundant GO terms (cutoff = similarity threshold)
+gsea_go_simplified <- simplify(gsea_go, cutoff = 0.5, by = "p.adjust", select_fun = min)
+as.data.frame(gsea_go_simplified)
+```
+
+```{r}
+df <- as.data.frame(gsea_go_simplified) %>%
+  arrange(NES) %>%
+  mutate(
+    Description = factor(Description, levels = Description),
+    Direction   = ifelse(NES > 0, "Enriched in SOZ HA", "Suppressed in SOZ HA"),
+    Direction   = factor(Direction, levels = c("Suppressed in SOZ HA", "Enriched in SOZ HA"))
+  )
+
+# Plot
+ggplot(df, aes(x = NES, y = Description, fill = Direction)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("Suppressed in SOZ HA" = "#4647AE", "Enriched in SOZ HA" = "#34908B")) +
+  geom_vline(xintercept = 0, linewidth = 0.5, colour = "black") +
+  labs(
+    title = "GSEA GO Biological Process",
+    x     = "Normalised Enrichment Score (NES)",
+    y     = NULL,
+    fill  = NULL
+  ) +
+  theme_classic() +
+  theme(
+    axis.text.y  = element_text(size = 8),
+    legend.position = "bottom"
+  )
+```
+
+Implicated hippocampi were enriched in pathways related to cholesterol biosynthesis (higher cholesterol can contribute to enhanced glutamatergic transmission), skeletal system morphogenesis and defence to virus (see leading edge genes below).
+
+```{r}
+print_leading_genes <- function(go_id){
+  leading_genes <- gsea_go@result[go_id, "core_enrichment"]
+  gene_info <- bitr(
+    strsplit(leading_genes, split = "/")[[1]],
+    fromType = "ENTREZID",
+    toType   = c("SYMBOL", "GENENAME"),
+    OrgDb    = org.Hs.eg.db
+  )
+  print(gene_info)
+}
+
+# 0048705 skeletal system morphogenesis
+print_leading_genes("GO:0048705")
+```
+Skeletal system morphogenesis really relates to extracellular matrix remodelling genes, that includes matrix metallopeptidases, collagens, hyaluronidase etc. Interesting is histone lysine methyltransferase which is an epigenetic regulator - the ECM changes might be more long-term than just acute. MEF2C is an important regulator of synaptic pruning.
+
+```{r}
+# 0051607 defence response to virus
+print_leading_genes("GO:0051607")
+```
+This GO term might reflect increased sterile neuroinflammation in the implicated hippocampus rather than defence response to virus:
+- damaged/stressed cells release damage-associated molecular patterns (DAMPs)
+- these are recognised by innate immune sensors such as cGAS, TLR3 (double stranded RNA), ZBP1 (left-handed DNA, RNA)
+- this then results in type I interferon response (STAT1, STAT2, IRF1, IFNAR2, IKBKE)
+- TRIM family ubiquitin ligases are interferon-stimulated genes
+
+
+
+
+
