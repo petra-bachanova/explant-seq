@@ -1,0 +1,26 @@
+---
+title: "electrode_anatomy_mapping"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(glue)
+luibrary(dplyr)
+
+project_dir <- "~/Documents/repos/explant-seq"
+mapping <- read_csv(glue("{project_dir}/data/metadata/electrode_anatomy_key.csv"))
+electrodes <- read_csv(glue("{project_dir}/data/metadata/explant-seq_electrode_metadata_260616.csv"))
+
+electrodes_mapped <- electrodes %>%
+  mutate(
+    electrode_root = electrode |> str_remove_all("\\s*\\(.*?\\)") |> str_remove_all("\\?") |> str_trim(),
+    electrode_root  = str_sub(electrode_root, 2),
+    lesion = ifelse(str_detect(electrode_root, "X"), "lesion", "")) %>%
+  left_join(mapping %>% select(electrode_root, region), by = "electrode_root")
+
+electrodes_mapped <- electrodes_mapped %>% select(sample_id, subject, electrode, laterality, region, lesion, hippocampus, ictal_involvement)
+electrodes_mapped[is.na(electrodes_mapped)] <- ""
+write_csv(electrodes_mapped, glue("{project_dir}/data/metadata/explant-seq_electrode_metadata_260617.csv"))
+```
+

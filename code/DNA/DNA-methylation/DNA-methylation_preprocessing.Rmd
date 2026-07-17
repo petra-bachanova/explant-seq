@@ -1,0 +1,70 @@
+---
+title: "DNA-methylation_preprocessing"
+output: html_document
+---
+
+```{r}
+library(glue)
+library(ENmix)
+library(minfiData)
+
+project_dir <- "~/Documents/repos/explant-seq"
+DNAm_dir <- glue("{project_dir}/data/DNA/DNA-methylation/2026-06-19")
+
+# if the following line errors out with Basename empty, it is because excel converted the array name to a number with scientific notation
+# fix in excel and rerun
+sheet <- read.metharray.sheet(glue("{DNAm_dir}/rawdata"), pattern = "csv$")
+rgSet <- read.metharray.exp(targets = sheet, extended = TRUE)
+```
+
+```{r}
+qc <- QCinfo(rgSet, distplot = TRUE)
+```
+
+```{r}
+plotCtrl(rgSet)
+```
+
+```{r}
+mdat <- preprocessENmix(
+  rgSet,
+  bg = "oob",
+  dye = "RELIC",
+  QCinfo = qc,
+  exQCsample = TRUE,
+  exQCcpg = TRUE,
+  nCores = 4
+)
+beta <- getB(mdat, type = "Illumina", offset = 100)
+multifreqpoly(beta, main = "Beta value distributions")
+```
+
+
+```{r}
+library(ggplot2)
+library(magrittr)
+
+# Check sex prediction
+gmSet <- mapToGenome(mdat)
+sex_pred <- getSex(gmSet)
+sex_pred$predictedSex
+
+sheet$Array_slide <- paste0(sheet$Slide, "_", sheet$Array)
+sex_df <- as.data.frame(sex_pred)
+sex_df <- tibble::rownames_to_column(sex_df, var = "Array_slide")
+sex_df <- sex_df %>% dplyr::left_join(sheet %>% dplyr::select(Sample_Name, Array_slide, Sex), by="Array_slide")
+
+ggplot(sex_df, aes(x = xMed, y = yMed, color = Sex)) +
+  geom_point(size = 3) +
+  labs(
+    x = "Median X chr intensity (log2)",
+    y = "Median Y chr intensity (log2)",
+    color = "Array",
+    title = "Predicted sex: X vs Y chromosome intensity"
+  ) +
+  theme_minimal()
+```
+
+
+
+

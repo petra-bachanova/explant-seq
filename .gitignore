@@ -30,3 +30,10 @@ slurm_logs/
 /code/RNA/RNAseq-preprocessing/**/metrics/
 /code/RNA/RNAseq-preprocessing/**/trimming/
 .Rproj.user
+.Rhistory
+.RData
+/code/RNA/.RData
+/code/RNA/.Rhisotry
+
+
+/MANUSCRIPT

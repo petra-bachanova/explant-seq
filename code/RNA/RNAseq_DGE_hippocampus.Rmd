@@ -18,18 +18,16 @@ rna_dir <- glue("{project_dir}/data/RNA/RNA-preprocessed")
 patients <- c("EXP001", "EXP003", "EXP006", "EXP007")
 
 # read in electrode metadata
-electrode_metadata <- patients %>%
-  set_names() %>%
-  map_dfr(~ read_excel(glue("{project_dir}/data/metadata/{.x}_electrode_metadata.xlsx")),
-          .id = "subject")
-meta <- electrode_metadata[!is.na(electrode_metadata$hippocampus), ]
+meta <- read.table(
+  glue("{project_dir}/data/metadata/explant-seq_electrode_metadata_260617.csv"), sep = ",", header = TRUE)
+meta[meta == ""] <- NA
+meta <- meta[!is.na(meta$hippocampus), ]
 
 # read in raw counts
 raw_counts <- read.table(
   glue("{rna_dir}/260601_exp001-007/feature_counts/featurecounts.readcounts.raw.tsv"),
   sep = "\t", header = TRUE)
 colnames(raw_counts) <- gsub("alignment.(.*?).srt.bam", "\\1", colnames(raw_counts))
-
 cols <- c(meta$sample_id, "Geneid")
 raw_counts <- raw_counts[, (names(raw_counts) %in% cols)]
 ```
@@ -49,7 +47,7 @@ meta$subject <- factor(meta$subject)
 dds <- DESeqDataSetFromMatrix(
   countData = raw_counts,
   colData = meta,
-  design = ~ subject + hippocampus
+  design = ~ subject + hippocampus  # PAIRED DESIGN
 )
 
 # filter to remove genes with very low counts (keeps genes with >10 counts in >4 samples)

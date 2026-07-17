@@ -8,8 +8,9 @@ library(glue)
 library(readxl)
 
 project_dir <- "~/Documents/repos/explant-seq"
-yields_literature <- read_excel(glue("{project_dir}/data/dna_rna_yields.xlsx"), sheet = "yields_previous_studies")
-yields_dhmc <- read_excel(glue("{project_dir}/data/dna_rna_yields.xlsx"), sheet = "yields_our_protocols")
+yields_path <- glue("{project_dir}/data/metadata/explant-seq_dna_rna_yields.xlsx")
+yields_literature <- read_excel(yields_path, sheet = "yields_previous_studies")
+yields_dhmc <- read_excel(yields_path, sheet = "yields_our_protocols")
 ```
 ### Clean
 ```{r}
