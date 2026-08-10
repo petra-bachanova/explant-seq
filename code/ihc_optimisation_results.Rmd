@@ -1,0 +1,62 @@
+---
+title: "ihc_optimisation_results"
+output: html_document
+---
+
+```{r}
+library(glue)
+library(readxl)
+
+project_dir <- "~/Documents/repos/explant-seq"
+
+df <- read_excel(glue("{project_dir}/data/260729_IHC_optimisation_results.xlsx"))
+df$group <- paste(df$sample, df$block, sep = "_")
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+df_summary <- df %>%
+  group_by(group, secondary, channel) %>%
+  summarise(
+    mean_val = mean(`mean intensity`, na.rm = TRUE),
+    sd_val   = sd(`mean intensity`, na.rm = TRUE),
+    n        = sum(!is.na(`mean intensity`)),
+    sem_val  = sd_val / sqrt(n),
+    .groups  = "drop"
+  )
+
+channel_colors = c(
+  "Cy3_560" = "#EC008C",
+  "Cy5_640" = "#00AEEF",
+  "Alexa488" = "#50C878")
+
+# Plot
+dodge_width <- 0.9  # must match between geom_bar and geom_errorbar to align
+
+p <- ggplot(df_summary, aes(x = secondary, y = mean_val, fill = channel)) +
+  geom_bar(position = position_dodge(width = dodge_width), stat = "identity") +
+  geom_errorbar(
+    aes(ymin = mean_val - sem_val, ymax = mean_val + sem_val),  # swap sem_val for sd_val if preferred
+    position = position_dodge(width = dodge_width),
+    width = 0.25
+  ) +
+  facet_wrap(~ group, scales = "free_x") +
+  scale_fill_manual(values = channel_colors) +
+  labs(
+    x = "Secondary",
+    y = "Mean intensity",
+    fill = "Channel"
+  ) +
+  theme_bw(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text  = element_text(face = "bold")
+  )
+
+print(p)
+```
+
+

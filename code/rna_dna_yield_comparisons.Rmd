@@ -6,12 +6,14 @@ output: html_document
 ```{r}
 library(glue)
 library(readxl)
+library(magrittr)
 
 project_dir <- "~/Documents/repos/explant-seq"
 yields_path <- glue("{project_dir}/data/metadata/explant-seq_dna_rna_yields.xlsx")
 yields_literature <- read_excel(yields_path, sheet = "yields_previous_studies")
-yields_dhmc <- read_excel(yields_path, sheet = "yields_our_protocols")
+yields_dhmc <- read_excel(yields_path, sheet = "yields_our_protocols_260810")
 ```
+
 ### Clean
 ```{r}
 library(tidyverse)
@@ -27,10 +29,19 @@ yields_lit_clean <- yields_literature %>%
   select(source, group, DNA, RNA, RIN)
 
 yields_dhmc_clean <- yields_dhmc %>%
+  dplyr::filter(!Protocol %in% c(
+    "fresh-lysis", 
+    "ex-vivo_frozen-lysis", 
+    "frozen-lysis", 
+    "PBS-wash_fresh-lysis (contaminated)", 
+    "another-experiment")) %>%
   mutate(
     source = Protocol,
     group  = "DHMC",
-    RIN    = suppressWarnings(as.numeric(RIN))
+    RIN    = suppressWarnings(as.numeric(RIN)),
+    DNA    = as.numeric(DNA),
+    RNA    = as.numeric(RNA),
+    RIN    = as.numeric(RIN)
   ) %>%
   select(source, group, DNA, RNA, RIN)
 
@@ -51,8 +62,14 @@ yields_long <- yields_combined %>%
       molecule == "RNA" ~ "Total RNA (ng)",
       molecule == "RIN" ~ "RIN"
     ),
-    source = factor(source, levels = c("Checri, 2023", "Dwivedi, 2025", "PBS-incubation-4h", "PBS-wash", "no-PBS_frozen-lysis", "PBS-wash_fresh-lysis", "PBS-wash_frozen-lysis"))
+    source = factor(source, levels = c("Checri, 2023", "Dwivedi, 2025", 
+                                       "PBS-4h-incubation", "PBS-wash", "PBS-wash_fresh-lysis", "PBS-wash_frozen-lysis"))
   )
+
+
+yields_long %>%
+  dplyr::group_by(source, molecule) %>%
+  summarise(median_yield = median(value, na.rm = TRUE))
 ```
 
 ```{r}
@@ -61,12 +78,12 @@ library(patchwork)
 source_colours <- c(
   "Checri, 2023"           = "#F1BB7B",
   "Dwivedi, 2025"          = "#FD6467",
-  "PBS-incubation-4h"      = "#5B1A18",
+  "PBS-4h-incubation"      = "#5B1A18",
   "PBS-wash"               = "#D67236",
-  "no-PBS_frozen-lysis"    = "#02401B",
   "PBS-wash_fresh-lysis"   = "#5BBCD6",
   "PBS-wash_frozen-lysis"  = "#00A08A"
 )
+
 
 shared_theme <- theme_bw(base_size = 12) +
   theme(

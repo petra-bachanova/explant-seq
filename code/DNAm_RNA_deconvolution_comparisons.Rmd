@@ -1,0 +1,97 @@
+---
+title: "DNAm_RNA_deconvolution_comparisons"
+output: html_document
+---
+
+```{r}
+library(glue)
+library(readxl)
+library(magrittr)
+
+project_dir <- "~/Documents/repos/explant-seq"
+dna_m_path <- glue("{project_dir}/data/DNA/DNA-methylation/2026-06-19/HiBED_deconvolution_260810.csv")
+rna_path <- glue("{project_dir}/data/RNA/cibersort_res_job11_260609.csv")
+
+dna_m <- read.csv(dna_m_path)
+rna <- read.csv(rna_path)
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# --- dna_m: reshape to long, already in percent (0-100) ---
+dna_long <- dna_m %>%
+  select(Sample_Name, Endothelial, Stromal, Astrocyte, Microglial,
+         Oligodendrocyte, GABA, GLU) %>%
+  rename(GABA_Inhibitory = GABA, GLU_Excitatory = GLU) %>%
+  pivot_longer(
+    cols = -Sample_Name,
+    names_to = "cell_type",
+    values_to = "proportion"
+  ) %>%
+  mutate(dataset = "DNAm", sample_id = Sample_Name) %>%
+  select(sample_id, dataset, cell_type, proportion)
+
+# --- rna: reshape to long, convert fraction -> percent, drop Opc ---
+rna_long <- rna %>%
+  select(Mixture, Ex, Oli, In, Mic, Ast, End, Per) %>%  # Opc dropped
+  rename(
+    GLU_Excitatory   = Ex,
+    Oligodendrocyte  = Oli,
+    GABA_Inhibitory  = In,
+    Microglial       = Mic,
+    Astrocyte        = Ast,
+    Endothelial      = End,
+    Stromal          = Per
+  ) %>%
+  pivot_longer(
+    cols = -Mixture,
+    names_to = "cell_type",
+    values_to = "proportion"
+  ) %>%
+  mutate(
+    proportion = proportion * 100,   # fraction -> percent
+    dataset = "RNA",
+    sample_id = Mixture
+  ) %>%
+  select(sample_id, dataset, cell_type, proportion)
+
+# --- combine ---
+combined <- bind_rows(dna_long, rna_long) %>%
+  mutate(cell_type = factor(cell_type, levels = c(
+    "Microglial", "Oligodendrocyte", "Astrocyte",
+    "Endothelial", "Stromal", "GABA_Inhibitory", "GLU_Excitatory"
+  )))
+```
+
+```{r}
+cell_type_colors <- c(
+  "GLU_Excitatory"  = "#3B9AB2", 
+  "Oligodendrocyte" = "#7EB6BC",
+  "GABA_Inhibitory" = "#A2C0A5",
+  "Microglial"      = "#C6C872",
+  "Astrocyte"       = "#E79308",
+  "Endothelial"     = "#ED6703",
+  "Stromal"         = "#F22200"
+)
+
+
+
+ggplot(combined, aes(x = cell_type, y = proportion,
+                      fill = cell_type,
+                      group = interaction(cell_type, dataset))) +
+  geom_boxplot(outlier.shape = NA, position = position_dodge(width = 0.8), width = 0.7) +
+  geom_point(aes(shape = dataset),
+             position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.8),
+             color = "black", size = 1, alpha = 0.5) +
+  scale_fill_manual(values = cell_type_colors) +
+  scale_shape_manual(values = c("DNAm" = 16, "RNA" = 17)) +
+  theme_minimal() +
+  theme(legend.position = "right",
+        strip.text = element_text(face = "bold")) +
+  labs(x = NULL, y = "Proportion (%)", shape = "Dataset", fill = "Cell type")
+```
+
+

@@ -9,7 +9,7 @@ library(dplyr)
 library(stringr)
 
 project_dir <- "~/Documents/repos/explant-seq"
-df <- read.csv(glue("{project_dir}/data/metadata/explant-seq_clinical_metadata_DEID_260604.csv"), check.names = FALSE)
+df <- read.csv(glue("{project_dir}/data/metadata/explant-seq_clinical_metadata_DEID_260810.csv"), check.names = FALSE)
 head(df)
 
 df <- df %>%

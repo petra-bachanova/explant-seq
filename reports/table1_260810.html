@@ -355,49 +355,26 @@ display: none;
 
 
 <pre class="r"><code>library(glue)
-library(dplyr)</code></pre>
-<pre><code>## Warning: package &#39;dplyr&#39; was built under R version 4.5.2</code></pre>
-<pre><code>## 
-## Attaching package: &#39;dplyr&#39;</code></pre>
-<pre><code>## The following objects are masked from &#39;package:stats&#39;:
-## 
-##     filter, lag</code></pre>
-<pre><code>## The following objects are masked from &#39;package:base&#39;:
-## 
-##     intersect, setdiff, setequal, union</code></pre>
-<pre class="r"><code>library(stringr)
+library(dplyr)
+library(stringr)
 
 project_dir &lt;- &quot;~/Documents/repos/explant-seq&quot;
-df &lt;- read.csv(glue(&quot;{project_dir}/data/metadata/Explant-seq_metadata_DEID_260604.csv&quot;), check.names = FALSE)
+df &lt;- read.csv(glue(&quot;{project_dir}/data/metadata/explant-seq_clinical_metadata_DEID_260810.csv&quot;), check.names = FALSE)
 head(df)</code></pre>
-<pre><code>##   De-identified ID Age at explant N electrodes SEEG laterality Sex
-## 1           EXP001             29           10               L   M
-## 2           EXP002             21            1                   M
-## 3           EXP003             35           12               R   M
-## 4           EXP004             31           17              Bl   M
-## 5           EXP005             25           14               L   F
-## 6           EXP006             28           14               L   M
-##            Race              Ethnicity Year of seizure onset Epilepsy duration
-## 1         White Not Hispanic or Latino                  2022                 3
-## 2         White                                           NA                NA
-## 3         White Not Hispanic or Latino                  2017                 8
-## 4         Asian Not Hispanic or Latino                  1994                31
-## 5 Not disclosed     Hispanic or Latino                  2019                 6
-## 6         White Not Hispanic or Latino                  2023                 2
-##                                              Risk factors MRI findings
-## 1                                             head trauma             
-## 2                                                                     
-## 3                                             head trauma             
-## 4                                                    none             
-## 5 learning disability, family history, hearing impairment             
-## 6                             head trauma, family history             
-##   Pathology findings
-## 1                   
-## 2                   
-## 3                   
-## 4             FCD 2b
-## 5                   
-## 6</code></pre>
+<pre><code>##   De-identified ID Age at explant N electrodes SEEG laterality Sex          Race              Ethnicity Year of seizure onset
+## 1           EXP001             29           10               L   M         White Not Hispanic or Latino                  2022
+## 2           EXP002             21            1                   M         White                                           NA
+## 3           EXP003             35           12               R   M         White Not Hispanic or Latino                  2017
+## 4           EXP004             31           17              Bl   M         Asian Not Hispanic or Latino                  1994
+## 5           EXP005             25           14               L   F Not disclosed     Hispanic or Latino                  2019
+## 6           EXP006             28           14               L   M         White Not Hispanic or Latino                  2023
+##   Epilepsy duration                                            Risk factors Semiology type MRI findings Pathology findings
+## 1                 3                                             head trauma             NA                                
+## 2                NA                                                                     NA                                
+## 3                 8                                             head trauma             NA                                
+## 4                31                                                    none             NA                          FCD 2b
+## 5                 6 learning disability, family history, hearing impairment             NA                                
+## 6                 2                             head trauma, family history             NA</code></pre>
 <pre class="r"><code>df &lt;- df %&gt;%
   filter(`SEEG laterality` != &quot;&quot;) %&gt;%
   mutate(
@@ -426,18 +403,9 @@ df &lt;- df %&gt;%
     race_display = factor(race_display),
     Ethnicity = factor(Ethnicity)
   )</code></pre>
-<pre><code>## Warning: There was 1 warning in `mutate()`.
-## ℹ In argument: `SEEG laterality = case_match(...)`.
-## Caused by warning:
-## ! `case_match()` was deprecated in dplyr 1.2.0.
-## ℹ Please use `recode_values()` instead.</code></pre>
-<pre class="r"><code>library(table1)</code></pre>
-<pre><code>## 
-## Attaching package: &#39;table1&#39;</code></pre>
-<pre><code>## The following objects are masked from &#39;package:base&#39;:
-## 
-##     units, units&lt;-</code></pre>
-<pre class="r"><code># --- table1 labels ---
+<pre class="r"><code>library(table1)
+
+# --- table1 labels ---
 label(df$`Age at explant`)        &lt;- &quot;Age at explant (years)&quot;
 label(df$`Epilepsy duration`)     &lt;- &quot;Epilepsy duration (years)&quot;
 label(df$`N electrodes`)          &lt;- &quot;Electrodes implanted (n)&quot;
@@ -470,9 +438,9 @@ table1(
 <thead>
 <tr>
 <th class="rowlabel firstrow lastrow"></th>
-<th class="firstrow lastrow"><span class="stratlabel">Male<br /><span class="stratn">(N=12)</span></span></th>
-<th class="firstrow lastrow"><span class="stratlabel">Female<br /><span class="stratn">(N=5)</span></span></th>
-<th class="firstrow lastrow"><span class="stratlabel">Overall<br /><span class="stratn">(N=17)</span></span></th>
+<th class="firstrow lastrow"><span class="stratlabel">Male<br /><span class="stratn">(N=14)</span></span></th>
+<th class="firstrow lastrow"><span class="stratlabel">Female<br /><span class="stratn">(N=6)</span></span></th>
+<th class="firstrow lastrow"><span class="stratlabel">Overall<br /><span class="stratn">(N=20)</span></span></th>
 </tr>
 <tfoot><tr><td colspan="4" class="Rtable1-footnote"><p>EXP002 excluded from the table since this was an ex-vivo implant during resection</p>
 </td></tr></tfoot>
@@ -486,9 +454,9 @@ table1(
 </tr>
 <tr>
 <td class="rowlabel lastrow">Median [IQR]</td>
-<td class="lastrow">32.5 [28.8, 37.5]</td>
-<td class="lastrow">42.0 [39.0, 44.0]</td>
-<td class="lastrow">35.0 [29.0, 42.0]</td>
+<td class="lastrow">34.0 [29.3, 37.5]</td>
+<td class="lastrow">40.5 [32.3, 43.5]</td>
+<td class="lastrow">34.5 [29.8, 42.0]</td>
 </tr>
 <tr>
 <td class="rowlabel firstrow"><span class="varlabel">SEEG laterality</span></td>
@@ -498,21 +466,21 @@ table1(
 </tr>
 <tr>
 <td class="rowlabel">Left</td>
-<td>6 (50.0%)</td>
-<td>4 (80.0%)</td>
-<td>10 (58.8%)</td>
+<td>6 (42.9%)</td>
+<td>4 (66.7%)</td>
+<td>10 (50.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel">Right</td>
-<td>4 (33.3%)</td>
-<td>1 (20.0%)</td>
-<td>5 (29.4%)</td>
+<td>6 (42.9%)</td>
+<td>2 (33.3%)</td>
+<td>8 (40.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel lastrow">Bilateral</td>
-<td class="lastrow">2 (16.7%)</td>
+<td class="lastrow">2 (14.3%)</td>
 <td class="lastrow">0 (0%)</td>
-<td class="lastrow">2 (11.8%)</td>
+<td class="lastrow">2 (10.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel firstrow"><span class="varlabel">Epilepsy duration (years)</span></td>
@@ -522,9 +490,9 @@ table1(
 </tr>
 <tr>
 <td class="rowlabel lastrow">Median [IQR]</td>
-<td class="lastrow">9.00 [4.75, 13.3]</td>
-<td class="lastrow">26.0 [7.00, 28.0]</td>
-<td class="lastrow">9.00 [6.00, 24.0]</td>
+<td class="lastrow">9.00 [5.75, 12.5]</td>
+<td class="lastrow">27.0 [11.8, 37.0]</td>
+<td class="lastrow">9.50 [6.75, 24.5]</td>
 </tr>
 <tr>
 <td class="rowlabel firstrow"><span class="varlabel">Electrodes implanted (n)</span></td>
@@ -534,9 +502,9 @@ table1(
 </tr>
 <tr>
 <td class="rowlabel lastrow">Median [IQR]</td>
-<td class="lastrow">15.0 [13.5, 17.0]</td>
-<td class="lastrow">14.0 [13.0, 16.0]</td>
-<td class="lastrow">15.0 [13.0, 16.0]</td>
+<td class="lastrow">15.0 [12.5, 16.8]</td>
+<td class="lastrow">13.5 [13.0, 15.5]</td>
+<td class="lastrow">14.5 [12.8, 16.0]</td>
 </tr>
 <tr>
 <td class="rowlabel firstrow"><span class="varlabel">Race</span></td>
@@ -546,27 +514,27 @@ table1(
 </tr>
 <tr>
 <td class="rowlabel">Asian</td>
-<td>1 (8.3%)</td>
+<td>1 (7.1%)</td>
 <td>0 (0%)</td>
-<td>1 (5.9%)</td>
+<td>1 (5.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel">Multiracial</td>
 <td>0 (0%)</td>
-<td>1 (20.0%)</td>
-<td>1 (5.9%)</td>
+<td>1 (16.7%)</td>
+<td>1 (5.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel">Not disclosed</td>
 <td>0 (0%)</td>
-<td>1 (20.0%)</td>
-<td>1 (5.9%)</td>
+<td>1 (16.7%)</td>
+<td>1 (5.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel lastrow">White</td>
-<td class="lastrow">11 (91.7%)</td>
-<td class="lastrow">3 (60.0%)</td>
-<td class="lastrow">14 (82.4%)</td>
+<td class="lastrow">13 (92.9%)</td>
+<td class="lastrow">4 (66.7%)</td>
+<td class="lastrow">17 (85.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel firstrow"><span class="varlabel">Ethnicity</span></td>
@@ -576,15 +544,15 @@ table1(
 </tr>
 <tr>
 <td class="rowlabel">Hispanic or Latino</td>
-<td>1 (8.3%)</td>
-<td>1 (20.0%)</td>
-<td>2 (11.8%)</td>
+<td>1 (7.1%)</td>
+<td>1 (16.7%)</td>
+<td>2 (10.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel lastrow">Not Hispanic or Latino</td>
-<td class="lastrow">11 (91.7%)</td>
-<td class="lastrow">4 (80.0%)</td>
-<td class="lastrow">15 (88.2%)</td>
+<td class="lastrow">13 (92.9%)</td>
+<td class="lastrow">5 (83.3%)</td>
+<td class="lastrow">18 (90.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel firstrow"><span class="varlabel">MTS diagnosis (MRI or pathology)</span></td>
@@ -594,15 +562,15 @@ table1(
 </tr>
 <tr>
 <td class="rowlabel">FALSE</td>
-<td>11 (91.7%)</td>
-<td>3 (60.0%)</td>
-<td>14 (82.4%)</td>
+<td>13 (92.9%)</td>
+<td>4 (66.7%)</td>
+<td>17 (85.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel lastrow">TRUE</td>
-<td class="lastrow">1 (8.3%)</td>
-<td class="lastrow">2 (40.0%)</td>
-<td class="lastrow">3 (17.6%)</td>
+<td class="lastrow">1 (7.1%)</td>
+<td class="lastrow">2 (33.3%)</td>
+<td class="lastrow">3 (15.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel firstrow"><span class="varlabel">Head trauma</span></td>
@@ -612,15 +580,15 @@ table1(
 </tr>
 <tr>
 <td class="rowlabel">FALSE</td>
-<td>4 (33.3%)</td>
-<td>2 (40.0%)</td>
-<td>6 (35.3%)</td>
+<td>6 (42.9%)</td>
+<td>2 (33.3%)</td>
+<td>8 (40.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel lastrow">TRUE</td>
-<td class="lastrow">8 (66.7%)</td>
-<td class="lastrow">3 (60.0%)</td>
-<td class="lastrow">11 (64.7%)</td>
+<td class="lastrow">8 (57.1%)</td>
+<td class="lastrow">4 (66.7%)</td>
+<td class="lastrow">12 (60.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel firstrow"><span class="varlabel">Perinatal complications</span></td>
@@ -630,15 +598,15 @@ table1(
 </tr>
 <tr>
 <td class="rowlabel">FALSE</td>
-<td>9 (75.0%)</td>
-<td>5 (100%)</td>
-<td>14 (82.4%)</td>
+<td>11 (78.6%)</td>
+<td>6 (100%)</td>
+<td>17 (85.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel lastrow">TRUE</td>
-<td class="lastrow">3 (25.0%)</td>
+<td class="lastrow">3 (21.4%)</td>
 <td class="lastrow">0 (0%)</td>
-<td class="lastrow">3 (17.6%)</td>
+<td class="lastrow">3 (15.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel firstrow"><span class="varlabel">Neurodevelopmental complications</span></td>
@@ -648,15 +616,15 @@ table1(
 </tr>
 <tr>
 <td class="rowlabel">FALSE</td>
-<td>10 (83.3%)</td>
-<td>2 (40.0%)</td>
-<td>12 (70.6%)</td>
+<td>11 (78.6%)</td>
+<td>3 (50.0%)</td>
+<td>14 (70.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel lastrow">TRUE</td>
-<td class="lastrow">2 (16.7%)</td>
-<td class="lastrow">3 (60.0%)</td>
-<td class="lastrow">5 (29.4%)</td>
+<td class="lastrow">3 (21.4%)</td>
+<td class="lastrow">3 (50.0%)</td>
+<td class="lastrow">6 (30.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel firstrow"><span class="varlabel">Encephalitis</span></td>
@@ -666,15 +634,15 @@ table1(
 </tr>
 <tr>
 <td class="rowlabel">FALSE</td>
-<td>12 (100%)</td>
-<td>4 (80.0%)</td>
-<td>16 (94.1%)</td>
+<td>14 (100%)</td>
+<td>5 (83.3%)</td>
+<td>19 (95.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel lastrow">TRUE</td>
 <td class="lastrow">0 (0%)</td>
-<td class="lastrow">1 (20.0%)</td>
-<td class="lastrow">1 (5.9%)</td>
+<td class="lastrow">1 (16.7%)</td>
+<td class="lastrow">1 (5.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel firstrow"><span class="varlabel">Family history of epilepsy</span></td>
@@ -684,15 +652,15 @@ table1(
 </tr>
 <tr>
 <td class="rowlabel">FALSE</td>
-<td>10 (83.3%)</td>
-<td>3 (60.0%)</td>
-<td>13 (76.5%)</td>
+<td>12 (85.7%)</td>
+<td>4 (66.7%)</td>
+<td>16 (80.0%)</td>
 </tr>
 <tr>
 <td class="rowlabel lastrow">TRUE</td>
-<td class="lastrow">2 (16.7%)</td>
-<td class="lastrow">2 (40.0%)</td>
-<td class="lastrow">4 (23.5%)</td>
+<td class="lastrow">2 (14.3%)</td>
+<td class="lastrow">2 (33.3%)</td>
+<td class="lastrow">4 (20.0%)</td>
 </tr>
 </tbody>
 </table>

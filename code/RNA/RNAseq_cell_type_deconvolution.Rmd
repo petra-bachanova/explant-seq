@@ -122,7 +122,7 @@ p_stack <- ggplot(deconv_df_melt, aes(x = Mixture, y = value, fill = variable)) 
   geom_bar(stat = "identity", width = 1) +
   scale_fill_manual(values = zissou_pal) +
   labs(
-    title = "Deconvolved cell proportions across 52 samples (ROSMAP reference)",
+    title = "Deconvolved cell proportions across 52 samples (ROSMAP ref)",
     subtitle = "In, Opc, Ast had 0 proportions",
     x = NULL,
     y = "Proportion (%)",

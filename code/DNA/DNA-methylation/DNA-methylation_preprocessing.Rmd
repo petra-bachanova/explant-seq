@@ -59,12 +59,165 @@ ggplot(sex_df, aes(x = xMed, y = yMed, color = Sex)) +
   labs(
     x = "Median X chr intensity (log2)",
     y = "Median Y chr intensity (log2)",
-    color = "Array",
     title = "Predicted sex: X vs Y chromosome intensity"
   ) +
   theme_minimal()
 ```
 
+# Deconvolution
 
+```{r}
+library(HiBED)
+data("HiBED_Libraries")
+
+# Mset_raw <- preprocessRaw(rgSet)
+mSet_noob <- preprocessNoob(rgSet)
+betas_for_deconv <- getBeta(mSet_noob)
+# strip EPICv2 suffixes back to standard cg IDs before matching
+rownames(betas_for_deconv) <- sub("_.*", "", rownames(betas_for_deconv))
+
+HiBED_result <- HiBED_deconvolution(betas_for_deconv, h = 2)
+HiBED_result <- tibble::rownames_to_column(HiBED_result, var = "Array_slide")
+HiBED_result <- sheet %>% 
+  dplyr::select(Array_slide, Sample_Name, Contact_anatomy, Proportion_in_WM) %>%
+  dplyr::left_join(HiBED_result, by="Array_slide")
+
+head(HiBED_result)
+write.csv(HiBED_result, glue("{DNAm_dir}/HiBED_deconvolution_260810.csv"))
+```
+
+
+```{r}
+library(wesanderson)
+
+HiBED_result_melt <- reshape2::melt(HiBED_result %>% dplyr::select(-Array_slide, -Contact_anatomy, -Proportion_in_WM), id.vars = "Sample_Name")
+
+cell_type_colors <- c(
+  "GLU"             = "#3B9AB2", 
+  "Oligodendrocyte" = "#7EB6BC",
+  "GABA"            = "#A2C0A5",
+  "Microglial"      = "#C6C872",
+  "Astrocyte"       = "#E79308",
+  "Endothelial"     = "#ED6703",
+  "Stromal"         = "#F22200"
+)
+
+
+p_stack <- ggplot(HiBED_result_melt, aes(x = Sample_Name, y = value, fill = variable)) +
+  geom_bar(stat = "identity", width = 1) +
+  scale_fill_manual(values = cell_type_colors) +
+  labs(
+    title = "",
+    subtitle = "",
+    x = NULL,
+    y = "Proportion (%)",
+    fill = "Cell type"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, colour = "grey50"),
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
+    panel.grid = element_blank(),
+    legend.position = "right"
+  )
+
+p_stack
+```
+
+
+
+
+```{r}
+ggplot(HiBED_result, aes(x = Proportion_in_WM, y = Oligodendrocyte)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x)
+```
+
+
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(paletteer)
+
+df_long <- HiBED_result %>%
+  mutate(
+    subject   = sub("_.*", "", Sample_Name),
+    electrode = sub("^[^_]+_([A-Za-z]+)_.*", "\\1", Sample_Name),
+    # combine sample name + anatomy into one label, used directly as the x factor
+    contact_label = paste(Sample_Name, Contact_anatomy, sep = "\n"),
+    contact_label = factor(contact_label, levels = unique(contact_label))
+  ) %>%
+  pivot_longer(
+    cols = c(Astrocyte, Oligodendrocyte, GABA, GLU, Endothelial, Stromal),
+    names_to = "CellType", values_to = "Proportion"
+  )
+
+
+ggplot(df_long, aes(x = Contact_anatomy, y = Proportion, fill = CellType)) +
+  geom_bar(stat = "identity", position = "fill") + 
+  facet_wrap(~ paste(subject, electrode), scales = "free_x", nrow = 2) +
+  labs(
+    x = NULL, y = "Cell type proportion (% of tissue)",
+    fill = "Cell type",
+    title = "Cell type composition by electrode contact",
+    subtitle = "Microglia, endothelial cells and stromal cells were removed"
+  ) + 
+  scale_fill_manual(values = cell_type_colors) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    strip.text = element_text(face = "bold")
+  )
+```
+
+
+```{r}
+anno <- getAnnotation(mdat)
+anno_df <- as.data.frame(anno)
+colnames(anno_df)
+
+get_marker_probes <- function(gene, anno_df,
+                                regions = c("TSS200", "TSS1500", "1stExon", "5'UTR")) {
+  region_pattern <- paste(regions, collapse = "|")
+  hits <- anno_df[
+    grepl(paste0("(^|;)", gene, "(;|$)"), anno_df$UCSC_RefGene_Name) &
+    grepl(region_pattern, anno_df$UCSC_RefGene_Group),
+  ]
+  rownames(hits)
+}
+
+mbp_probes    <- get_marker_probes("MBP", anno_df)
+prox1_probes  <- get_marker_probes("PROX1", anno_df)
+wfs1_probes   <- get_marker_probes("WFS1", anno_df)
+amigo2_probes   <- get_marker_probes("AMIGO2", anno_df)
+
+
+length(mbp_probes)
+length(prox1_probes)
+length(wfs1_probes)
+length(amigo2_probes)
+
+beta_mbp   <- colMeans(beta[mbp_probes, , drop = FALSE], na.rm = TRUE)
+beta_prox1 <- colMeans(beta[prox1_probes, , drop = FALSE], na.rm = TRUE)
+beta_wfs1  <- colMeans(beta[wfs1_probes, , drop = FALSE], na.rm = TRUE)
+beta_amigo2  <- colMeans(beta[amigo2_probes, , drop = FALSE], na.rm = TRUE)
+
+marker_df <- data.frame(
+  Array_slide = names(beta_mbp),
+  MBP = beta_mbp,
+  PROX1 = beta_prox1,
+  WFS1 = beta_wfs1, 
+  AMIGO2 = beta_amigo2
+)
+
+marker_df <- merge(marker_df, sheet[, c("Array_slide", "Contact_anatomy", "Proportion_in_WM")], by = "Array_slide")
+```
+
+```{r}
+cor(marker_df %>% dplyr::select(MBP, PROX1, WFS1, AMIGO2, Proportion_in_WM))
+```
 
 
