@@ -65,7 +65,7 @@ my_continuous <- function(x, ...) {
 }
 
 footnote <- "EXP002 excluded from the table since this was an ex-vivo implant during resection"
-table1(
+t1 <- table1(
   ~ `Age at explant` + `SEEG laterality` + `Epilepsy duration` + `N electrodes` +
     race_display + Ethnicity + mts_diagnosis +
     rf_head_trauma + rf_perinatal +
@@ -74,6 +74,8 @@ table1(
   data = df,
   render.continuous = my_continuous, footnote=footnote
 )
+
+write.csv(t1, glue("{project_dir}/data/metadata/table1_261006.csv"))
 ```
 
 

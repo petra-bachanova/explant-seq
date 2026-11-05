@@ -1,0 +1,50 @@
+---
+title: "rip_presentation"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+
+data <- tibble(
+  category = c(
+    "Germline monogenic",
+    "Acquired structural\n(trauma, stroke, infection)",
+    "Immune-mediated",
+    "Metabolic",
+    "Unknown / multifactorial"
+  ),
+  proportion = c(2, 40, 5, 2, 51),
+  colour = c("#640D5F", "#249D8F", "#FFB200", "#EB5B00", "#118AB2")
+) %>%
+  arrange(desc(proportion)) %>%
+  mutate(
+    category = factor(category, levels = category),
+    fraction = proportion / sum(proportion),
+    ymax = cumsum(fraction),
+    ymin = lag(ymax, default = 0),
+    label_pos = (ymax + ymin) / 2,
+    label = paste0(proportion, "%")
+  )
+
+ggplot(data, aes(ymax = ymax, ymin = ymin, xmax = 4, xmin = 3,
+                 fill = category)) +
+  geom_rect(colour = "white", linewidth = 0.5) +
+  #geom_text(aes(x = 3.5, y = label_pos, label = label),
+   #         size = 3.5, fontface = "bold", colour = "white") +
+  coord_polar(theta = "y") +
+  xlim(c(2, 4)) +
+  scale_fill_manual(
+    values = setNames(data$colour, data$category) #,
+    #labels = paste0(data$category, " (", data$proportion, "%)")
+  ) +
+  labs(title = "Epilepsy aetiology", fill = NULL) +
+  theme_void(base_size = 13) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", margin = margin(b = 10)),
+    legend.position = "right",
+    legend.text = element_text(size = 10),
+    legend.key.size = unit(0.8, "cm")
+  )
+```
+

@@ -1,0 +1,122 @@
+---
+title: "DNAm_RNA_deconvolution_comparisons"
+output: html_document
+---
+
+```{r}
+library(glue)
+library(readxl)
+library(magrittr)
+
+project_dir <- "~/Documents/repos/explant-seq"
+dna_m_path <- glue("{project_dir}/data/DNA/DNA-methylation/2026-06-19/HiBED_deconvolution_260810.csv")
+rna_path <- glue("{project_dir}/data/RNA/cibersort_res_job11_260609.csv")
+
+dna_m <- read.csv(dna_m_path)
+rna <- read.csv(rna_path)
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# --- dna_m: reshape to long, already in percent (0-100) ---
+dna_long <- dna_m %>%
+  select(Sample_Name, Endothelial, Stromal, Astrocyte, Microglial,
+         Oligodendrocyte, GABA, GLU) %>%
+  rename(GABA_Inhibitory = GABA, GLU_Excitatory = GLU) %>%
+  pivot_longer(
+    cols = -Sample_Name,
+    names_to = "cell_type",
+    values_to = "proportion"
+  ) %>%
+  mutate(dataset = "DNAm", sample_id = Sample_Name) %>%
+  select(sample_id, dataset, cell_type, proportion)
+
+# --- rna: reshape to long, convert fraction -> percent, drop Opc ---
+rna_long <- rna %>%
+  select(Mixture, Ex, Oli, In, Mic, Ast, End, Per) %>%  # Opc dropped
+  rename(
+    GLU_Excitatory   = Ex,
+    Oligodendrocyte  = Oli,
+    GABA_Inhibitory  = In,
+    Microglial       = Mic,
+    Astrocyte        = Ast,
+    Endothelial      = End,
+    Stromal          = Per
+  ) %>%
+  pivot_longer(
+    cols = -Mixture,
+    names_to = "cell_type",
+    values_to = "proportion"
+  ) %>%
+  mutate(
+    proportion = proportion * 100,   # fraction -> percent
+    dataset = "RNA",
+    sample_id = Mixture
+  ) %>%
+  select(sample_id, dataset, cell_type, proportion)
+
+# --- combine ---
+combined <- bind_rows(dna_long, rna_long) %>%
+  mutate(cell_type = factor(cell_type, levels = c(
+    "Microglial", "Oligodendrocyte", "Astrocyte",
+    "Endothelial", "Stromal", "GABA_Inhibitory", "GLU_Excitatory"
+  )))
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# --- Check + document zero cell types before dropping ---
+combined %>%
+  group_by(cell_type, dataset) %>%
+  summarise(mean_prop = mean(proportion), max_prop = max(proportion), .groups = "drop") %>%
+  filter(mean_prop < 0.01)
+
+combined_filtered <- combined %>%
+  filter(cell_type != "Astrocyte")
+
+# --- Dataset colors ---
+dataset_colors <- c("DNAm" = "#4274D9", "RNA" = "#00C68D")
+
+summary_df <- combined_filtered %>%
+  group_by(cell_type, dataset) %>%
+  summarise(
+    mean_prop = mean(proportion),
+    se_prop   = sd(proportion) / sqrt(n()),
+    .groups = "drop"
+  )
+
+shared_theme <- theme_bw(base_size = 12) +
+  theme(
+    legend.position  = "right",
+    legend.title     = element_blank(),
+    plot.caption     = element_text(size = 8, colour = "grey50"),
+    axis.title.x     = element_text(size = 10),
+    plot.title       = element_text(hjust = 0.5, size = 11, face = "bold")
+  )
+
+p_bar <- ggplot(summary_df, aes(x = cell_type, y = mean_prop, fill = dataset)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.6,
+           alpha = 0.6, colour = "grey30") +
+  geom_errorbar(aes(ymin = mean_prop - se_prop, ymax = mean_prop + se_prop),
+                position = position_dodge(width = 0.8), width = 0.2, colour = "grey30") +
+  geom_point(data = combined_filtered,
+             aes(x = cell_type, y = proportion, colour = dataset, group = dataset),
+             position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.8),
+             size = 1, alpha = 0.5, inherit.aes = FALSE) +
+  scale_fill_manual(values = dataset_colors) +
+  scale_colour_manual(values = dataset_colors) +
+  labs(x = NULL, y = "Proportion (%)", fill = "Dataset", colour = "Dataset",
+       caption = "Astrocyte proportions were ~0% in both DNAm and RNA datasets and are omitted from this figure.") +
+  shared_theme +
+  coord_flip()
+
+p_bar
+
+ggsave(file="test.svg", plot=p_bar, width=7, height=4)
+```
+

@@ -14,6 +14,7 @@ yields_literature <- read_excel(yields_path, sheet = "yields_previous_studies")
 yields_dhmc <- read_excel(yields_path, sheet = "yields_our_protocols_260810")
 ```
 
+
 ### Clean
 ```{r}
 library(tidyverse)
@@ -43,7 +44,7 @@ yields_dhmc_clean <- yields_dhmc %>%
     RNA    = as.numeric(RNA),
     RIN    = as.numeric(RIN)
   ) %>%
-  select(source, group, DNA, RNA, RIN)
+  select(source, group, DNA, RNA, RIN, `Patient ID`)
 
 yields_combined <- bind_rows(yields_lit_clean, yields_dhmc_clean)
 
@@ -62,7 +63,7 @@ yields_long <- yields_combined %>%
       molecule == "RNA" ~ "Total RNA (ng)",
       molecule == "RIN" ~ "RIN"
     ),
-    source = factor(source, levels = c("Checri, 2023", "Dwivedi, 2025", 
+    source = factor(source, levels = c("Checri, 2023", "Dwivedi, 2025", "trial patient",
                                        "PBS-4h-incubation", "PBS-wash", "PBS-wash_fresh-lysis", "PBS-wash_frozen-lysis"))
   )
 
@@ -78,6 +79,7 @@ library(patchwork)
 source_colours <- c(
   "Checri, 2023"           = "#F1BB7B",
   "Dwivedi, 2025"          = "#FD6467",
+  "trial patient"          =  "#191970",  
   "PBS-4h-incubation"      = "#5B1A18",
   "PBS-wash"               = "#D67236",
   "PBS-wash_fresh-lysis"   = "#5BBCD6",
@@ -105,6 +107,7 @@ p_dna <- ggplot(dna_data,
   geom_boxplot(alpha = 0.25, outlier.shape = NA, width = 0.5) +
   geom_jitter(width = 0.15, height = 0, size = 1, alpha = 0.8) +
   # scale_y_log10() +
+  ylim(0, 800) +
   scale_colour_manual(values = source_colours) +
   scale_fill_manual(values = source_colours) +
   labs(x = NULL, y=NULL, title = "DNA (ng)") +
@@ -117,8 +120,9 @@ rna_data <- yields_long %>%
 p_rna <- ggplot(rna_data,
                 aes(x = source, y = value, colour = source, fill = source)) +
   geom_boxplot(alpha = 0.25, outlier.shape = NA, width = 0.5) +
-  geom_jitter(width = 0.15, height = 0, size = 1, alpha = 0.8)+
+  geom_jitter(width = 0.15, height = 0, size = 1, alpha = 0.8) +
   scale_colour_manual(values = source_colours) +
+  ylim(0, 2000) +
   scale_fill_manual(values = source_colours) +
   labs(x = NULL, y=NULL, title = "RNA (ng)") +
   shared_theme
@@ -135,8 +139,10 @@ p_rin <- ggplot(rin_data,
   shared_theme
 
 # ---Combine------------------------------------------------------------------
-p_dna + p_rna + p_rin +
+final_p <- p_dna + p_rna + p_rin +
   plot_layout(ncol = 3)
+
+ggsave(file="test.png", plot=final_p, width=8, height=4, dpi=500)
 ```
 
 DNA and RNA yields are consistently higher across our lysis protocols compared with PBS incubation and rinse also used by Checri and Dwivedi for electrode processing.
