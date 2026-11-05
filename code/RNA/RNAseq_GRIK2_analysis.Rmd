@@ -1,0 +1,62 @@
+---
+title: "GRIK2 expression analysis (RNAseq data)"
+output: html_document
+---
+
+```{r}
+library(readr)
+library(glue)
+library(dplyr)
+library(purrr)
+library(readxl)
+
+
+project_dir <- "~/Documents/repos/explant-seq"
+rna_dir <- glue("{project_dir}/data/RNA/RNA-preprocessed")
+
+# read in raw counts
+raw_counts <- read.table(
+  glue("{rna_dir}/260601_exp001-007/feature_counts/featurecounts.readcounts.raw.tsv"),
+  sep = "\t", header = TRUE)
+colnames(raw_counts) <- gsub("alignment.(.*?).srt.bam", "\\1", colnames(raw_counts))
+cols <- c(meta$sample_id, "Geneid")
+```
+
+
+### Plot expression of GRIK2 (ENSG00000164418)
+```{r}
+library(tidyverse)
+
+grik2 <- raw_counts %>%
+  filter(Geneid == "ENSG00000164418") %>%
+  dplyr::select(-Chr, -Start, -End, -Strand, -Length) %>%
+  pivot_longer(-Geneid, names_to = "sample", values_to = "count") %>%
+  mutate(subject = str_split_fixed(sample, "_", 2)[, 1],
+         electrode = str_split_fixed(sample, "_", 2)[, 2])
+
+library(ggrepel)
+
+ggplot(grik2, aes(x = subject, y = count)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  geom_text_repel(data = filter(grik2, count > 1.5), aes(label = electrode), size = 4) +
+  labs(title = "GRIK2 expression per patient", x = "Subject", y = "Raw count") +
+  theme_classic()
+```
+
+### Check that this isn't due to much higher library size in EXP003
+```{r}
+library_sizes <- raw_counts %>%
+  dplyr::select(-Chr, -Start, -End, -Strand, -Length, -Geneid) %>% 
+  colSums() %>% 
+  reshape2::melt() %>% rownames_to_column("sample")  %>%
+  mutate(subject = str_split_fixed(sample, "_", 2)[, 1],
+         electrode = str_split_fixed(sample, "_", 2)[, 2])
+
+ggplot(library_sizes, aes(x = subject, y = value)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  labs(title = "Library size per patient", x = "Subject", y = "") +
+  theme_classic()
+```
+
