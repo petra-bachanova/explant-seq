@@ -287,10 +287,10 @@ rule picard_markdup:
     conda:
         "env_config/picard.yaml",
 
-    resources: cpus="2", maxtime="30:00", mem_mb=20000,
+    resources: cpus="2", maxtime="4:00:00", mem_mb=20000,
 
     shell: """
-            {params.picard} -Xmx2G -Xms2G  \
+            {params.picard} -Xmx14G -Xms2G  \
                  MarkDuplicates \
                 I=alignment/{params.sample}.srt.bam \
                 O=markdup/{params.sample}.mkdup.bam \
@@ -319,7 +319,7 @@ rule picard_collectmetrics:
     resources: cpus="2", maxtime="8:00:00", mem_mb=20000,
 
     shell: """
-        {params.picard} -Xmx2G -Xms2G \
+        {params.picard} -Xmx14G -Xms2G \
              CollectRnaSeqMetrics \
             I=markdup/{params.sample}.mkdup.bam \
             O=metrics/picard/{params.sample}.picard.rna.metrics.txt \
