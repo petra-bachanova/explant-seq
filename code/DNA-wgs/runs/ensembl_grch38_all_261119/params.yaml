@@ -1,0 +1,12 @@
+input: '/dartfs/rc/lab/H/HongJ/Petra/explant-seq/code/DNA-wgs/metadata/samplesheets/samplesheet_all_lowpass.csv'
+outdir: '/dartfs/rc/lab/H/HongJ/Petra/explant-seq/code/DNA-wgs/runs/ensembl_grch38_all_261119/results'
+publish_dir_mode: 'copy'
+
+genome: null
+igenomes_ignore: true
+fasta: '/dartfs-hpc/rc/lab/G/GMBSR_bioinfo/genomic_references/reference_index_generation/Homo_sapiens.GRCh38.dna.primary_assembly.fa'
+save_reference: true
+
+trim_fastq: true
+skip_tools: 'baserecalibrator'
+markduplicates_pixel_distance: 2500   # patterned flow cell (NextSeq 2000)

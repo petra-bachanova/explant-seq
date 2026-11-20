@@ -1,0 +1,29 @@
+# Ignore everything (git can look inside folders)
+*
+!*/
+
+# Don't descend into big or regenerable folders
+work/
+results/
+.nextflow/
+resources/
+__pycache__/
+
+# Tracking these
+!.gitignore
+!README.md
+!LICENSE
+!scripts/**
+!config/**
+!metadata/**
+!docs_reports/**/*.md
+!runs/*/params.yaml
+!runs/*/cluster.config
+!runs/*/project.env
+
+# Exceptions
+.DS_Store
+*.pyc
+*.swp
+*.bak
+.Rhistory

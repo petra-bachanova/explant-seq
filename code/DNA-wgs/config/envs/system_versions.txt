@@ -1,0 +1,4 @@
+Thu Nov 19 12:16:03 EST 2026
+micromamba 2.10.0
+apptainer version 1.5.5-1.el8
+kernel 4.18.0-553.184.1.el8_10.x86_64
