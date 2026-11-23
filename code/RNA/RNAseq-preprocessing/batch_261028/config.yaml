@@ -1,6 +1,5 @@
 # this file must have the header sample_id<tab>fastq_1<tab>fastq_2.  (The second tab and fastq_2 are optional.)
 sample_csv: "sample.csv"
-# sample_csv: "/dartfs/rc/lab/H/HongJ/Petra/explant-seq/code/RNA/RNAseq-preprocessing/batch_260601/sample.csv"
 
 # library layout: single or paired
 layout: "paired"

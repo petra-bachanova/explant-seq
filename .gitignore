@@ -1,6 +1,10 @@
 # macOS
 .DS_Store
 
+**/multiqc_manual/**/*.txt
+**/multiqc_manual/**/*.json
+**/multiqc/**/*.txt
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
